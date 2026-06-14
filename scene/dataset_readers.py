@@ -371,8 +371,11 @@ def format_infos(dataset,split):
 
 
 def readHyperDataInfos(datadir,use_bg_points,eval):
-    train_cam_infos = Load_hyper_data(datadir,0.5,use_bg_points,split ="train")
-    test_cam_infos = Load_hyper_data(datadir,0.5,use_bg_points,split="test")
+    # env-compat: NeRF-DS native 480x270 cần ratio 1.0 (rgb/1x), HyperNeRF giữ 0.5 (rgb/2x).
+    # Default 0.5 = giữ nguyên hành vi tác giả; NeRF-DS đặt HYPER_RATIO=1.0 qua os.environ.
+    ratio = float(os.environ.get("HYPER_RATIO", "0.5"))
+    train_cam_infos = Load_hyper_data(datadir,ratio,use_bg_points,split ="train")
+    test_cam_infos = Load_hyper_data(datadir,ratio,use_bg_points,split="test")
     print("load finished")
     train_cam = format_hyper_data(train_cam_infos,"train")
     print("format finished")
