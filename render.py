@@ -59,32 +59,34 @@ def render_set(
 
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
-    render_images = []
-    gt_list = []
-    render_list = []
     print("point nums:", gaussians._xyz.shape[0])
+    # env-compat (Colab RAM): ghi từng frame render/gt ngay trong vòng lặp thay vì gom
+    # render_list/gt_list (tensor CUDA) rồi ghi 1 lần ở cuối -> tránh OOM host RAM/VRAM
+    # khi test set lớn (vd HyperNeRF banana 513 view). render_images (numpy uint8 CPU,
+    # ~1.5MB/frame) vẫn gom để xuất video_rgb.mp4. render_time chỉ cộng thời gian render()
+    # (loại I/O ghi đĩa) nên FPS tương đương cách đo bản gốc.
+    render_images = []
+    render_time = 0.0
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-        if idx == 0:
-            time1 = time()
-
+        t0 = time()
         rendering = render(view, gaussians, pipeline, background, cam_type=cam_type)[
             "render"
         ]
+        render_time += time() - t0
+        torchvision.utils.save_image(
+            rendering, os.path.join(render_path, "{0:05d}".format(idx) + ".png")
+        )
         render_images.append(to8b(rendering).transpose(1, 2, 0))
-        render_list.append(rendering)
         if name in ["train", "test"]:
             if cam_type != "PanopticSports":
                 gt = view.original_image[0:3, :, :]
             else:
                 gt = view["image"].cuda()
-            gt_list.append(gt)
+            torchvision.utils.save_image(
+                gt, os.path.join(gts_path, "{0:05d}".format(idx) + ".png")
+            )
 
-    time2 = time()
-    print("FPS:", (len(views) - 1) / (time2 - time1))
-
-    multithread_write(gt_list, gts_path)
-
-    multithread_write(render_list, render_path)
+    print("FPS:", (len(views) - 1) / render_time)
 
     imageio.mimwrite(
         os.path.join(model_path, name, "ours_{}".format(iteration), "video_rgb.mp4"),
